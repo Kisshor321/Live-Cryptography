@@ -1,0 +1,82 @@
+import requests
+import pandas as pd
+from time import sleep
+
+def fetch_crypto_data():
+    """Fetch top 50 cryptocurrency data using CoinGecko API."""
+    url = "https://api.coingecko.com/api/v3/coins/markets"
+    params = {
+        "vs_currency": "usd",
+        "order": "market_cap_desc",
+        "per_page": 50,
+        "page": 1,
+        "sparkline": False
+    }
+    response = requests.get(url, params=params)
+    if response.status_code == 200:
+        return response.json()
+    else:
+        raise Exception(f"Error fetching data: {response.status_code}")
+
+def save_to_excel(df, top_5, stats_top_50, stats_top_5):
+    """Save the data and statistics to an Excel file."""
+    # Create summary DataFrame
+    summary_data = {
+        "Metric": ["Average Price", "Minimum Price", "Maximum Price"],
+        "Top 50": [stats_top_50["Average Price"], stats_top_50["Minimum Price"], stats_top_50["Maximum Price"]],
+        "Top 5": [stats_top_5["Average Price"], stats_top_5["Minimum Price"], stats_top_5["Maximum Price"]],
+    }
+    summary_df = pd.DataFrame(summary_data)
+
+    # Save to Excel
+    with pd.ExcelWriter("crypto_live_updates.xlsx", engine="openpyxl") as writer:
+        df.to_excel(writer, index=False, sheet_name="Top 50 Cryptos")
+        top_5.to_excel(writer, index=False, sheet_name="Top 5 Cryptos")
+        summary_df.to_excel(writer, index=False, sheet_name="Summary")
+
+def calculate_statistics(df):
+    """Calculate average, min, and max prices for a DataFrame."""
+    return {
+        "Average Price": df["Current Price"].mean(),
+        "Minimum Price": df["Current Price"].min(),
+        "Maximum Price": df["Current Price"].max()
+    }
+
+def main():
+    while True:
+        try:
+            print("Fetching data...")
+            data = fetch_crypto_data()
+
+            # Convert data to DataFrame
+            df = pd.DataFrame(data)
+            df = df[['id', 'symbol', 'current_price', 'high_24h', 'low_24h', 'price_change_percentage_24h']]
+            df.rename(columns={
+                'id': 'Name',
+                'symbol': 'Symbol',
+                'current_price': 'Current Price',
+                'high_24h': '24h High',
+                'low_24h': '24h Low',
+                'price_change_percentage_24h': '24h % Change'
+            }, inplace=True)
+
+            # Extract top 5 cryptocurrencies
+            top_5 = df.head(5)
+
+            # Calculate statistics for Top 50 and Top 5
+            stats_top_50 = calculate_statistics(df)
+            stats_top_5 = calculate_statistics(top_5)
+
+            # Save data to Excel
+            save_to_excel(df, top_5, stats_top_50, stats_top_5)
+            print("Data updated in 'crypto_live_updates.xlsx'.")
+
+        except Exception as e:
+            print(f"Error occurred: {e}")
+
+        # Wait for 5 minutes before the next update
+        print("Waiting for 5 minutes...")
+        sleep(300)  # 300 seconds = 5 minutes
+
+if __name__ == "__main__":
+    main()
